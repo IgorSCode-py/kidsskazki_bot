@@ -4,6 +4,8 @@ import logging
 
 from telegram import __version__ as TG_VER
 
+from goods import get_goods
+
 try:
     from telegram import __version_info__
 except ImportError:
@@ -20,6 +22,9 @@ from telegram.ext import Application, CommandHandler, \
     ContextTypes, ConversationHandler, MessageHandler, filters, PreCheckoutQueryHandler
 
 STAGE_ONE, STAGE_TWO = range(2)
+
+pricelist = get_goods()
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -28,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 
-# after (optional) shipping, it's the pre-checkout
+# the pre-checkout
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Answers the PreQecheckoutQuery"""
     query = update.pre_checkout_query
@@ -43,67 +48,38 @@ async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Confirms the successful payment."""
     # do something after successfully receiving payment
-    bought = update.message.successful_payment.invoice_payload
+
+    chat_id = pricelist[update.message.successful_payment.invoice_payload].telegram_channel_id
 
     await update.message.reply_text("Ваш платеж получен! Вот Ваша одноразовая ссылка-приглашение:")
 
-    chat_id = -1001669090613
-    if bought == 'Custom-Payload-3':
-        #letters
-        chat_id = -1001625228766
-    elif bought == 'Custom-Payload-2':
-        #45 min
-        chat_id = -1001862709465
+
 
     invite_link = await context.bot.create_chat_invite_link(chat_id=chat_id, member_limit=1)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=invite_link.invite_link)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a message with three inline buttons attached."""
+    """Sends messages with items attached."""
     #pics source is here: https://kidsskazki.ru/pictures
-    await context.bot.send_invoice(chat_id=update.effective_chat.id,
-                                   title="Кот Огонëк короткие сказки",
-                                   description="Сказки для быстрого засыпания",
+    for item in pricelist.values():
+        await context.bot.send_invoice(chat_id=update.effective_chat.id,
+                                   title=item.title,
+                                   description=item.description,
                                    provider_token=PAYMENT_PROVIDER_TOKEN,
-                                   payload = "Custom-Payload-1",
-                                   prices=[LabeledPrice("Кот Огонëк короткие сказки", 10000)],
+                                   payload = item.payload,
+                                   prices=[LabeledPrice(item.title, item.price*100)],
                                    currency='RUB',
-                                   photo_url='https://thumb.tildacdn.com/tild6631-3166-4163-a162-323036373962/-/format/webp/____1024.jpg',
+                                   photo_url=item.photo_url,
                                    photo_width=416,
                                    photo_height=416,
                                    photo_size=416,
                                    protect_content=True,
                                    )
-    await context.bot.send_invoice(chat_id=update.effective_chat.id,
-                                   title="Кот Огонëк 45 минут",
-                                   description="Длинная сказка для быстрого засыпания",
-                                   provider_token=PAYMENT_PROVIDER_TOKEN,
-                                   payload = "Custom-Payload-2",
-                                   prices=[LabeledPrice("Кот Огонëк короткие сказки", 15000)],
-                                   currency='RUB',
-                                   photo_url='https://thumb.tildacdn.com/tild6139-3164-4664-a135-323136313164/-/format/webp/1675765768559.jpg',
-                                   photo_width=416,
-                                   photo_height=416,
-                                   photo_size=416,
-                                   protect_content=True,
-                                   )
-    await context.bot.send_invoice(chat_id=update.effective_chat.id,
-                                   title="Буквы",
-                                   description="28 сказок про буквы",
-                                   provider_token=PAYMENT_PROVIDER_TOKEN,
-                                   payload="Custom-Payload-3",
-                                   prices=[LabeledPrice("28 сказок про буквы", 20000)],
-                                   currency='RUB',
-                                   photo_url='https://thumb.tildacdn.com/tild3239-3537-4262-a366-373739623239/-/format/webp/___2400_5.jpg',
-                                   photo_width=416,
-                                   photo_height=416,
-                                   photo_size=416,
-                                   protect_content=True,
-                                   )
+
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Повторить список сказок для покупки: /start .")
 
 
-async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def end(update: Update) -> int:
     """Returns `ConversationHandler.END`, which tells the
     ConversationHandler that the conversation is over.
     """
@@ -113,7 +89,7 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return ConversationHandler.END
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def help_command(update: Update) -> None:
     """Displays info on how to use the bot."""
     await update.message.reply_text("Use /start to test this bot.")
 
